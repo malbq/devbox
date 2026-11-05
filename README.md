@@ -32,23 +32,28 @@ incus admin init --minimal
 incus profile show default
 ```
 
-If UFW is active, allow DHCP and DNS from containers to the host, and container
-traffic routed through the host (bridge `incusbr0` by default; otherwise builds
-fail with `Temporary failure resolving`). Containers get no other access to
-host services:
+If UFW is active, allow DHCP and DNS from containers to the host, deny every
+other host service, and allow container traffic routed through the host
+(bridge `incusbr0` by default; otherwise builds fail with
+`Temporary failure resolving`). `prepend` puts each rule first, so the deny is
+added before the allows and ends up after them, ahead of rules such as
+`ALLOW Anywhere` that would otherwise also match container traffic:
 
 ```sh
-sudo ufw allow in on incusbr0 to any port 67 proto udp    # DHCPv4
-sudo ufw allow in on incusbr0 to any port 547 proto udp   # DHCPv6
-sudo ufw allow in on incusbr0 to any port 53              # DNS
+sudo ufw prepend deny in on incusbr0
+sudo ufw prepend allow in on incusbr0 to any port 67 proto udp    # DHCPv4
+sudo ufw prepend allow in on incusbr0 to any port 547 proto udp   # DHCPv6
+sudo ufw prepend allow in on incusbr0 to any port 53              # DNS
 sudo ufw route allow in on incusbr0
 sudo ufw route allow out on incusbr0
+sudo ufw status numbered
 ```
 
-If you used the broader `sudo ufw allow in on incusbr0` before, remove it with
-`sudo ufw delete allow in on incusbr0`. UFW is the only layer that blocks
-containers from reaching the host's public IPv6 addresses; the devbox ACL below
-covers private ranges only.
+The `incusbr0` rules must come first in `ufw status numbered`, in that order,
+for IPv4 and IPv6. If you used the broader `sudo ufw allow in on incusbr0`
+before, remove it first with `sudo ufw delete allow in on incusbr0`. UFW is the
+only layer that blocks containers from reaching the host's public IPv6
+addresses; the devbox ACL below covers private ranges only.
 
 To resolve container names (`my-project.incus`) from the host, install a
 systemd service (`incus-dns-<bridge>.service`, e.g. `incus-dns-incusbr0.service`).
