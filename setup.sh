@@ -9,7 +9,13 @@ apt-get update
 apt-get install -y --no-install-recommends \
   ca-certificates curl git openssh-client openssh-server sudo \
   build-essential pkg-config unzip zip xz-utils \
-  less nano procps iproute2 locales tmux chromium fonts-liberation
+  less nano procps iproute2 locales tmux chromium fonts-liberation \
+  unattended-upgrades
+# Long-lived containers install Debian security updates daily.
+cat > /etc/apt/apt.conf.d/20auto-upgrades <<'EOF'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+EOF
 
 # Official mise apt repository, isolated signing key.
 install -d -m 755 /etc/apt/keyrings

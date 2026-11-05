@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Configure SSH access to a project container.
-# Generates host keys, starts sshd, installs your public key,
-# and adds a Host entry to ~/.ssh/config.
+# Generates host keys, starts sshd, installs your public key, pins the host keys
+# in ~/.ssh/known_hosts and adds a Host entry to ~/.ssh/config.
 #
 # Usage:
 #   ./setup-ssh.sh CONTAINER [--port HOST_PORT[:CONTAINER_PORT]]
@@ -16,8 +16,8 @@ set -euo pipefail
 usage() {
   cat <<'EOF' >&2
 Configure SSH access to a project container.
-Generates host keys, starts sshd, installs your public key,
-and adds a Host entry to ~/.ssh/config.
+Generates host keys, starts sshd, installs your public key, pins the host keys
+in ~/.ssh/known_hosts and adds a Host entry to ~/.ssh/config.
 
 Usage:
   ./setup-ssh.sh CONTAINER [--port HOST_PORT[:CONTAINER_PORT]]
@@ -69,7 +69,7 @@ done
 ssh-keygen -l -f "$pubkey" >/dev/null || die "Invalid SSH public key: $pubkey"
 private_key="${pubkey%.pub}"
 identity_file="$private_key"
-[[ $identity_file == "$HOME"/* ]] && identity_file="~/.ssh/${identity_file#"$HOME/.ssh/"}"
+[[ $identity_file == "$HOME"/* ]] && identity_file="~/${identity_file#"$HOME/"}"
 
 # Parse PORT or FIRST:SECOND into port_a and port_b.
 parse_ports() {
@@ -103,8 +103,21 @@ incus file push "$pubkey" "$container/home/dev/.ssh/authorized_keys" --mode=600
 incus exec "$container" -- chown dev:dev /home/dev/.ssh/authorized_keys
 incus list "$container"
 
+host_name="$container.incus"
+install -d -m 700 "$HOME/.ssh"
+
+# Pin host keys read over incus exec (trusted channel), instead of trust on first use.
+known_hosts="$HOME/.ssh/known_hosts"
+host_keys=$(incus exec "$container" -- sh -c 'cat /etc/ssh/ssh_host_*_key.pub')
+[[ -n $host_keys ]] || die "No SSH host keys found in $container."
+touch "$known_hosts"
+ssh-keygen -R "$host_name" -f "$known_hosts" >/dev/null 2>&1 || true
+while read -r key_type key _; do
+  printf '%s %s %s\n' "$host_name" "$key_type" "$key"
+done <<< "$host_keys" >> "$known_hosts"
+echo "Pinned host keys for $host_name in $known_hosts."
+
 config="$HOME/.ssh/config"
-install -d -m 700 "$(dirname "$config")"
 touch "$config"
 chmod 600 "$config"
 if grep -Eq "^Host[[:space:]]+$container([[:space:]]|\$)" "$config"; then
@@ -112,8 +125,13 @@ if grep -Eq "^Host[[:space:]]+$container([[:space:]]|\$)" "$config"; then
 else
   {
     printf '\nHost %s\n' "$container"
-    printf '    HostName %s.incus\n' "$container"
+    printf '    HostName %s\n' "$host_name"
     printf '    User dev\n'
+    printf '    IdentityFile "%s"\n' "$identity_file"
+    printf '    IdentitiesOnly yes\n'
+    printf '    StrictHostKeyChecking yes\n'
+    printf '    ForwardAgent no\n'
+    printf '    ForwardX11 no\n'
     (( ${#forwards[@]} )) && printf '%s\n' "${forwards[@]}"
   } >> "$config"
   echo "Added Host $container to $config."
