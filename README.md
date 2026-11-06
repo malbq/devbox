@@ -1,6 +1,6 @@
 # devbox
 
-One persistent, hardened Incus container per project, built from a shared Debian 13 image with coding agents preinstalled. Checkouts, dependencies, agent logins and secrets stay isolated inside each container, away from the host and LAN.
+Persistent development environments for AI coding agents, with a ready-to-use toolchain and a separate security boundary for each project. Each project runs in its own Incus container, built from a shared Debian 13 image.
 
 ## Requirements
 
@@ -36,7 +36,7 @@ sudo ufw status numbered
 sudo ./setup-dns.sh
 ```
 
-4. Create the hardened `devbox` profile and network ACL:
+4. Create the `devbox` profile and network ACL:
 
 ```sh
 ./setup-profile.sh
@@ -60,7 +60,7 @@ incus launch dev my-project --profile default --profile devbox
 ./setup-ssh.sh my-project --port 8080
 ```
 
-8. Inside the container (`ssh my-project`), auth, clone and log in; put secrets in `~/.config/devbox/secrets.env` (`KEY=value`, `chmod 600`):
+8. Inside the container (`ssh my-project`), authenticate, clone the repo and log in to agents; put secrets in `~/.config/devbox/secrets.env` (`KEY=value`, `chmod 600`):
 
 ```sh
 gh auth login
@@ -83,7 +83,7 @@ grok login
 # or: ./setup-cursor-worker.sh my-project /home/dev/other
 ```
 
-**Remote port forwards** — expose host services inside the container while SSH is connected:
+**Remote port forwards** — reach host services from the container while SSH is connected:
 
 ```sh
 ./setup-ssh.sh my-project --port 8080 --remote-port 9222 --remote-port 9876
